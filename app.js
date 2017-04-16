@@ -1,6 +1,7 @@
+const path = require('path');
 
 if (process.argv.length < 4) {
-    console.log("Usage: " + __filename + " username password");
+    console.log("Usage: node " + path.basename(__filename) + " username password");
     process.exit(-1);
 }
 const http = require('http');
@@ -28,8 +29,8 @@ let spaceQuotaCandidate = {}; // key = name, value = memoryLimit (MB)
 let today = new Date();
 let cstToday = new Date();
 cstToday.setHours(today.getHours() - 6 + today.getTimezoneOffset() / 60);
-console.log('JST (+9): ' + today.toString());
-console.log('CST (-6): ' + cstToday.toString());
+console.log(`LOCAL (${today.getTimezoneOffset() > 0 ? '' : '+'}${today.getTimezoneOffset() / -60}): ${today.toString()}`);
+console.log('CST   (-6): ' + cstToday.toString());
 
 let targetMonth = `${cstToday.getFullYear()}-${('0' + (cstToday.getMonth() + 1)).slice(-2)}`;
 let periodEndDate = new Date(cstToday.getFullYear(), cstToday.getMonth() + 1, 0, 23, 59, 59);
@@ -95,6 +96,7 @@ Promise.resolve()
     }).then(function (responseBody) {
         accounts = JSON.parse(responseBody);
 
+        console.log('# current usage');
         let promises = [];
         accounts['resources'].forEach(function (resource) {
             let ownerUserId = resource['entity']['owner_userid'];
@@ -160,6 +162,7 @@ Promise.resolve()
         //        console.log(JSON.stringify(spaceQuotaDefinitions, null, 2));
 
         // update memory_limit of space quotas named with runtime name
+        console.log('# update space quota definitions');
         let promises = [];
         spaceQuotaDefinitions['resources'].forEach(function (resource) {
             let name = resource['entity']['name'];
@@ -183,6 +186,7 @@ Promise.resolve()
 
                 let p = httpsRequestPromise(options, postData, function (responseBody) {
                     spaceQuotaDefinitionsUpdated[name] = JSON.parse(responseBody);
+                    console.log(`${name}: ${spaceQuotaDefinitionsUpdated[name]['entity']['memory_limit']} MB (${spaceQuotaDefinitionsUpdated[name]['metadata']['updated_at']})`);
                 });
                 promises.push(p);
             }
@@ -205,9 +209,8 @@ function responseMessageHandler(responseMessage, resolve = function () { }, reje
         error = new Error(`unexpected contentType: contentType = [${contentType}]`);
     }
     if (error) {
-        console.log(error.message);
         responseMessage.resume();
-        reject();
+        reject(error);
         return;
     }
 
@@ -222,8 +225,7 @@ function httpsGetPromise(options, callback) {
         https.get(options, (responseMessage) => {
             responseMessageHandler(responseMessage, resolve, reject, callback);
         }).on('error', (e) => {
-            console.log(`https.get() error: error.message = [${e.message}]`);
-            reject();
+            reject(e);
         });
     });
 }
@@ -233,8 +235,7 @@ function httpsRequestPromise(options, postData, callback) {
         const clientRequest = https.request(options, (responseMessage) => {
             responseMessageHandler(responseMessage, resolve, reject, callback);
         }).on('error', (e) => {
-            console.log(`https.get() error: error.message = [${e.message}]`);
-            reject();
+            reject(e);
         });
         clientRequest.write(postData);
         clientRequest.end();
